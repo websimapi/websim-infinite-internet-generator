@@ -9,6 +9,7 @@ function App() {
   const [selectedProject, setSelectedProject] = useState(null);
   const [generatingProject, setGeneratingProject] = useState(null);
   const [sandboxContent, setSandboxContent] = useState("");
+  const [waitingForComment, setWaitingForComment] = useState(false);
   const { data: ideas, loading: ideasLoading } = useQuery(room.collection("ideas"));
   const { data: projects, loading: projectsLoading } = useQuery(room.collection("generated_projects"));
   const generateSuperPrompt = async (idea) => {
@@ -29,6 +30,7 @@ function App() {
   const handleAddIdea = async () => {
     if (!inputIdea.trim() || generating) return;
     setGenerating(true);
+    setWaitingForComment(true);
     try {
       const superPrompt = await generateSuperPrompt(inputIdea);
       const idea = await room.collection("ideas").create({
@@ -37,19 +39,47 @@ function App() {
         clicks: 0,
         status: "ready"
       });
-      await window.websim.postComment({
-        content: `\u{1F4A1} New idea: "${inputIdea}"
+      const commentContent = `\u{1F4A1} New idea: "${inputIdea}"
 
 \u{1F680} Enhanced prompt: ${superPrompt}
 
-\u2728 Generating project automatically...`
+\u2728 Generating project automatically...`;
+      await window.websim.postComment({
+        content: commentContent
       });
-      setTimeout(() => {
-        generateProject(idea);
-      }, 1e3);
+      const pollForComment = () => {
+        const checkInterval = setInterval(async () => {
+          try {
+            const project = await window.websim.getCurrentProject();
+            const response = await fetch(`/api/v1/projects/${project.id}/comments?first=10`);
+            const data = await response.json();
+            const ourComment = data.comments.data.find(
+              (comment) => comment.comment.raw_content.includes(`\u{1F4A1} New idea: "${inputIdea}"`)
+            );
+            if (ourComment) {
+              clearInterval(checkInterval);
+              setWaitingForComment(false);
+              setTimeout(() => {
+                generateProject(idea);
+              }, 1e3);
+            }
+          } catch (error) {
+            console.error("Error checking for comment:", error);
+            clearInterval(checkInterval);
+            setWaitingForComment(false);
+          }
+        }, 7e3);
+        setTimeout(() => {
+          clearInterval(checkInterval);
+          setWaitingForComment(false);
+          generateProject(idea);
+        }, 6e4);
+      };
+      pollForComment();
       setInputIdea("");
     } catch (error) {
       console.error("Error generating idea:", error);
+      setWaitingForComment(false);
     } finally {
       setGenerating(false);
     }
@@ -248,17 +278,17 @@ Project idea: ${idea.super_prompt}`
     /* @__PURE__ */ jsxDEV("header", { className: "text-center mb-12", children: [
       /* @__PURE__ */ jsxDEV("h1", { className: "text-6xl font-bold bg-gradient-to-r from-purple-400 via-pink-500 to-red-500 bg-clip-text text-transparent mb-4", children: "Infinite Internet Generator" }, void 0, false, {
         fileName: "<stdin>",
-        lineNumber: 283,
+        lineNumber: 323,
         columnNumber: 17
       }, this),
       /* @__PURE__ */ jsxDEV("p", { className: "text-xl text-gray-300", children: "Turn your ideas into AI-generated websites instantly! \u{1F680}\u2728" }, void 0, false, {
         fileName: "<stdin>",
-        lineNumber: 286,
+        lineNumber: 326,
         columnNumber: 17
       }, this)
     ] }, void 0, true, {
       fileName: "<stdin>",
-      lineNumber: 282,
+      lineNumber: 322,
       columnNumber: 13
     }, this),
     /* @__PURE__ */ jsxDEV("div", { className: "grid lg:grid-cols-2 gap-8", children: [
@@ -266,8 +296,28 @@ Project idea: ${idea.super_prompt}`
         /* @__PURE__ */ jsxDEV("div", { className: "bg-gray-800 rounded-xl p-6 border border-gray-700", children: [
           /* @__PURE__ */ jsxDEV("h2", { className: "text-2xl font-semibold mb-4 text-purple-400", children: "\u{1F4AD} Share Your Idea" }, void 0, false, {
             fileName: "<stdin>",
-            lineNumber: 296,
+            lineNumber: 336,
             columnNumber: 25
+          }, this),
+          waitingForComment && /* @__PURE__ */ jsxDEV("div", { className: "mb-4 p-3 bg-yellow-900 border border-yellow-700 rounded-lg", children: /* @__PURE__ */ jsxDEV("div", { className: "flex items-center gap-2", children: [
+            /* @__PURE__ */ jsxDEV("div", { className: "animate-spin", children: "\u23F3" }, void 0, false, {
+              fileName: "<stdin>",
+              lineNumber: 340,
+              columnNumber: 37
+            }, this),
+            /* @__PURE__ */ jsxDEV("span", { className: "text-yellow-300", children: "Waiting for comment to be submitted... Checking every 7 seconds" }, void 0, false, {
+              fileName: "<stdin>",
+              lineNumber: 341,
+              columnNumber: 37
+            }, this)
+          ] }, void 0, true, {
+            fileName: "<stdin>",
+            lineNumber: 339,
+            columnNumber: 33
+          }, this) }, void 0, false, {
+            fileName: "<stdin>",
+            lineNumber: 338,
+            columnNumber: 29
           }, this),
           /* @__PURE__ */ jsxDEV("div", { className: "flex gap-3", children: [
             /* @__PURE__ */ jsxDEV(
@@ -279,13 +329,13 @@ Project idea: ${idea.super_prompt}`
                 placeholder: "A social network for time travelers...",
                 className: "flex-1 px-4 py-3 bg-gray-900 border border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent",
                 onKeyPress: (e) => e.key === "Enter" && handleAddIdea(),
-                disabled: generating
+                disabled: generating || waitingForComment
               },
               void 0,
               false,
               {
                 fileName: "<stdin>",
-                lineNumber: 298,
+                lineNumber: 346,
                 columnNumber: 29
               },
               this
@@ -294,49 +344,49 @@ Project idea: ${idea.super_prompt}`
               "button",
               {
                 onClick: handleAddIdea,
-                disabled: generating || !inputIdea.trim(),
+                disabled: generating || waitingForComment || !inputIdea.trim(),
                 className: "px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-semibold",
-                children: generating ? "\u{1F9E0}" : "\u2728"
+                children: waitingForComment ? "\u23F3" : generating ? "\u{1F9E0}" : "\u2728"
               },
               void 0,
               false,
               {
                 fileName: "<stdin>",
-                lineNumber: 307,
+                lineNumber: 355,
                 columnNumber: 29
               },
               this
             )
           ] }, void 0, true, {
             fileName: "<stdin>",
-            lineNumber: 297,
+            lineNumber: 345,
             columnNumber: 25
           }, this)
         ] }, void 0, true, {
           fileName: "<stdin>",
-          lineNumber: 295,
+          lineNumber: 335,
           columnNumber: 21
         }, this),
         /* @__PURE__ */ jsxDEV("div", { className: "bg-gray-800 rounded-xl p-6 border border-gray-700", children: [
           /* @__PURE__ */ jsxDEV("h2", { className: "text-2xl font-semibold mb-4 text-blue-400", children: "\u{1F517} Generated Ideas" }, void 0, false, {
             fileName: "<stdin>",
-            lineNumber: 319,
+            lineNumber: 367,
             columnNumber: 25
           }, this),
           /* @__PURE__ */ jsxDEV("div", { className: "space-y-3 max-h-96 overflow-y-auto", children: ideasLoading ? /* @__PURE__ */ jsxDEV("div", { className: "text-center py-8", children: [
             /* @__PURE__ */ jsxDEV("div", { className: "animate-spin text-3xl mb-2", children: "\u{1F300}" }, void 0, false, {
               fileName: "<stdin>",
-              lineNumber: 323,
+              lineNumber: 371,
               columnNumber: 37
             }, this),
             /* @__PURE__ */ jsxDEV("div", { children: "Loading ideas..." }, void 0, false, {
               fileName: "<stdin>",
-              lineNumber: 324,
+              lineNumber: 372,
               columnNumber: 37
             }, this)
           ] }, void 0, true, {
             fileName: "<stdin>",
-            lineNumber: 322,
+            lineNumber: 370,
             columnNumber: 33
           }, this) : ideas?.length ? ideas.map((idea) => /* @__PURE__ */ jsxDEV("div", { className: "group", children: /* @__PURE__ */ jsxDEV(
             "button",
@@ -348,17 +398,17 @@ Project idea: ${idea.super_prompt}`
                 /* @__PURE__ */ jsxDEV("div", { className: "flex-1", children: [
                   /* @__PURE__ */ jsxDEV("div", { className: "font-medium text-purple-300 mb-1", children: idea.original_idea }, void 0, false, {
                     fileName: "<stdin>",
-                    lineNumber: 336,
+                    lineNumber: 384,
                     columnNumber: 53
                   }, this),
                   /* @__PURE__ */ jsxDEV("div", { className: "text-sm text-gray-400 line-clamp-2", children: idea.super_prompt }, void 0, false, {
                     fileName: "<stdin>",
-                    lineNumber: 339,
+                    lineNumber: 387,
                     columnNumber: 53
                   }, this)
                 ] }, void 0, true, {
                   fileName: "<stdin>",
-                  lineNumber: 335,
+                  lineNumber: 383,
                   columnNumber: 49
                 }, this),
                 /* @__PURE__ */ jsxDEV("div", { className: "flex items-center gap-2 ml-4", children: [
@@ -367,26 +417,26 @@ Project idea: ${idea.super_prompt}`
                     idea.clicks
                   ] }, void 0, true, {
                     fileName: "<stdin>",
-                    lineNumber: 344,
+                    lineNumber: 392,
                     columnNumber: 53
                   }, this),
                   generatingProject === idea.id ? /* @__PURE__ */ jsxDEV("div", { className: "animate-spin text-xl", children: "\u{1F9E0}" }, void 0, false, {
                     fileName: "<stdin>",
-                    lineNumber: 348,
+                    lineNumber: 396,
                     columnNumber: 57
                   }, this) : /* @__PURE__ */ jsxDEV("div", { className: "text-xl opacity-50 group-hover:opacity-100", children: "\u{1F680}" }, void 0, false, {
                     fileName: "<stdin>",
-                    lineNumber: 350,
+                    lineNumber: 398,
                     columnNumber: 57
                   }, this)
                 ] }, void 0, true, {
                   fileName: "<stdin>",
-                  lineNumber: 343,
+                  lineNumber: 391,
                   columnNumber: 49
                 }, this)
               ] }, void 0, true, {
                 fileName: "<stdin>",
-                lineNumber: 334,
+                lineNumber: 382,
                 columnNumber: 45
               }, this)
             },
@@ -394,37 +444,37 @@ Project idea: ${idea.super_prompt}`
             false,
             {
               fileName: "<stdin>",
-              lineNumber: 329,
+              lineNumber: 377,
               columnNumber: 41
             },
             this
           ) }, idea.id, false, {
             fileName: "<stdin>",
-            lineNumber: 328,
+            lineNumber: 376,
             columnNumber: 37
           }, this)) : /* @__PURE__ */ jsxDEV("div", { className: "text-center py-8 text-gray-500", children: "No ideas yet! Add one above to get started \u{1F3AF}" }, void 0, false, {
             fileName: "<stdin>",
-            lineNumber: 360,
+            lineNumber: 408,
             columnNumber: 33
           }, this) }, void 0, false, {
             fileName: "<stdin>",
-            lineNumber: 320,
+            lineNumber: 368,
             columnNumber: 25
           }, this)
         ] }, void 0, true, {
           fileName: "<stdin>",
-          lineNumber: 318,
+          lineNumber: 366,
           columnNumber: 21
         }, this),
         /* @__PURE__ */ jsxDEV("div", { className: "bg-gray-800 rounded-xl p-6 border border-gray-700", children: [
           /* @__PURE__ */ jsxDEV("h2", { className: "text-2xl font-semibold mb-4 text-green-400", children: "\u{1F3C6} Project Gallery" }, void 0, false, {
             fileName: "<stdin>",
-            lineNumber: 369,
+            lineNumber: 417,
             columnNumber: 25
           }, this),
           /* @__PURE__ */ jsxDEV("div", { className: "space-y-3 max-h-96 overflow-y-auto", children: projectsLoading ? /* @__PURE__ */ jsxDEV("div", { className: "text-center py-4", children: "Loading projects..." }, void 0, false, {
             fileName: "<stdin>",
-            lineNumber: 372,
+            lineNumber: 420,
             columnNumber: 33
           }, this) : projects?.sort((a, b) => b.votes - a.votes)?.map((project) => /* @__PURE__ */ jsxDEV("div", { className: "flex items-center justify-between p-3 bg-gray-900 rounded-lg border border-gray-600", children: [
             /* @__PURE__ */ jsxDEV(
@@ -435,7 +485,7 @@ Project idea: ${idea.super_prompt}`
                 children: [
                   /* @__PURE__ */ jsxDEV("div", { className: "font-medium", children: project.title }, void 0, false, {
                     fileName: "<stdin>",
-                    lineNumber: 379,
+                    lineNumber: 427,
                     columnNumber: 41
                   }, this),
                   /* @__PURE__ */ jsxDEV("div", { className: "text-xs text-gray-500", children: [
@@ -443,7 +493,7 @@ Project idea: ${idea.super_prompt}`
                     project.username
                   ] }, void 0, true, {
                     fileName: "<stdin>",
-                    lineNumber: 380,
+                    lineNumber: 428,
                     columnNumber: 41
                   }, this)
                 ]
@@ -452,7 +502,7 @@ Project idea: ${idea.super_prompt}`
               true,
               {
                 fileName: "<stdin>",
-                lineNumber: 375,
+                lineNumber: 423,
                 columnNumber: 37
               },
               this
@@ -463,7 +513,7 @@ Project idea: ${idea.super_prompt}`
                 project.views
               ] }, void 0, true, {
                 fileName: "<stdin>",
-                lineNumber: 383,
+                lineNumber: 431,
                 columnNumber: 41
               }, this),
               /* @__PURE__ */ jsxDEV(
@@ -480,39 +530,39 @@ Project idea: ${idea.super_prompt}`
                 true,
                 {
                   fileName: "<stdin>",
-                  lineNumber: 386,
+                  lineNumber: 434,
                   columnNumber: 41
                 },
                 this
               )
             ] }, void 0, true, {
               fileName: "<stdin>",
-              lineNumber: 382,
+              lineNumber: 430,
               columnNumber: 37
             }, this)
           ] }, project.id, true, {
             fileName: "<stdin>",
-            lineNumber: 374,
+            lineNumber: 422,
             columnNumber: 33
           }, this)) }, void 0, false, {
             fileName: "<stdin>",
-            lineNumber: 370,
+            lineNumber: 418,
             columnNumber: 25
           }, this)
         ] }, void 0, true, {
           fileName: "<stdin>",
-          lineNumber: 368,
+          lineNumber: 416,
           columnNumber: 21
         }, this)
       ] }, void 0, true, {
         fileName: "<stdin>",
-        lineNumber: 293,
+        lineNumber: 333,
         columnNumber: 17
       }, this),
       /* @__PURE__ */ jsxDEV("div", { className: "bg-gray-800 rounded-xl p-6 border border-gray-700", children: [
         /* @__PURE__ */ jsxDEV("h2", { className: "text-2xl font-semibold mb-4 text-orange-400", children: "\u{1F5A5}\uFE0F Live Preview" }, void 0, false, {
           fileName: "<stdin>",
-          lineNumber: 401,
+          lineNumber: 449,
           columnNumber: 21
         }, this),
         /* @__PURE__ */ jsxDEV("div", { className: "bg-white rounded-lg overflow-hidden", style: { height: "600px" }, children: sandboxContent ? /* @__PURE__ */ jsxDEV(
@@ -527,32 +577,32 @@ Project idea: ${idea.super_prompt}`
           false,
           {
             fileName: "<stdin>",
-            lineNumber: 404,
+            lineNumber: 452,
             columnNumber: 29
           },
           this
         ) : /* @__PURE__ */ jsxDEV("div", { className: "flex items-center justify-center h-full bg-gray-100 text-gray-600", children: /* @__PURE__ */ jsxDEV("div", { className: "text-center", children: [
           /* @__PURE__ */ jsxDEV("div", { className: "text-4xl mb-4", children: "\u{1F3A8}" }, void 0, false, {
             fileName: "<stdin>",
-            lineNumber: 413,
+            lineNumber: 461,
             columnNumber: 37
           }, this),
           /* @__PURE__ */ jsxDEV("div", { className: "text-lg", children: "Click an idea to generate a website!" }, void 0, false, {
             fileName: "<stdin>",
-            lineNumber: 414,
+            lineNumber: 462,
             columnNumber: 37
           }, this)
         ] }, void 0, true, {
           fileName: "<stdin>",
-          lineNumber: 412,
+          lineNumber: 460,
           columnNumber: 33
         }, this) }, void 0, false, {
           fileName: "<stdin>",
-          lineNumber: 411,
+          lineNumber: 459,
           columnNumber: 29
         }, this) }, void 0, false, {
           fileName: "<stdin>",
-          lineNumber: 402,
+          lineNumber: 450,
           columnNumber: 21
         }, this),
         selectedProject && /* @__PURE__ */ jsxDEV("div", { className: "mt-4 flex gap-3", children: [
@@ -571,7 +621,7 @@ Project idea: ${idea.super_prompt}`
             true,
             {
               fileName: "<stdin>",
-              lineNumber: 422,
+              lineNumber: 470,
               columnNumber: 29
             },
             this
@@ -590,35 +640,35 @@ Project idea: ${idea.super_prompt}`
             false,
             {
               fileName: "<stdin>",
-              lineNumber: 428,
+              lineNumber: 476,
               columnNumber: 29
             },
             this
           )
         ] }, void 0, true, {
           fileName: "<stdin>",
-          lineNumber: 421,
+          lineNumber: 469,
           columnNumber: 25
         }, this)
       ] }, void 0, true, {
         fileName: "<stdin>",
-        lineNumber: 400,
+        lineNumber: 448,
         columnNumber: 17
       }, this)
     ] }, void 0, true, {
       fileName: "<stdin>",
-      lineNumber: 291,
+      lineNumber: 331,
       columnNumber: 13
     }, this)
   ] }, void 0, true, {
     fileName: "<stdin>",
-    lineNumber: 281,
+    lineNumber: 321,
     columnNumber: 9
   }, this);
 }
 const root = createRoot(document.getElementById("root"));
 root.render(/* @__PURE__ */ jsxDEV(App, {}, void 0, false, {
   fileName: "<stdin>",
-  lineNumber: 446,
+  lineNumber: 494,
   columnNumber: 13
 }));
