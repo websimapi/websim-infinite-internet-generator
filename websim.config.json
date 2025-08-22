@@ -1,0 +1,66 @@
+{
+  "database": {
+    "schema": {
+      "ideas": {
+        "id": {
+          "type": "uuid",
+          "description": "Unique identifier for the idea"
+        },
+        "original_idea": {
+          "type": "text",
+          "description": "The original user input idea"
+        },
+        "super_prompt": {
+          "type": "text",
+          "description": "The AI-enhanced super prompt for generation"
+        },
+        "clicks": {
+          "type": "integer",
+          "description": "Number of times this idea was clicked to generate"
+        },
+        "status": {
+          "type": "text",
+          "description": "Status of the idea (ready, generating, etc.)"
+        }
+      },
+      "generated_projects": {
+        "id": {
+          "type": "uuid",
+          "description": "Unique identifier for the generated project"
+        },
+        "idea_id": {
+          "type": "uuid",
+          "description": "Reference to the original idea"
+        },
+        "title": {
+          "type": "text",
+          "description": "Project title"
+        },
+        "code": {
+          "type": "text",
+          "description": "Generated HTML/CSS/JS code"
+        },
+        "votes": {
+          "type": "integer",
+          "description": "Number of votes received"
+        },
+        "views": {
+          "type": "integer",
+          "description": "Number of times viewed"
+        }
+      },
+      "project_votes": {
+        "id": {
+          "type": "text",
+          "description": "Composite key: user_id + project_id for uniqueness"
+        },
+        "project_id": {
+          "type": "uuid",
+          "description": "Reference to the project being voted on"
+        }
+      }
+    },
+    "instructions": "This is an Infinite Internet Generator where user comments/ideas get transformed into full websites by AI. Ideas are stored with their enhanced prompts, generated projects contain the full code, and voting is tracked per user per project."
+  }
+}
+
